@@ -42,10 +42,117 @@ const LV=[
   13:'.......hhh..hhh..hhh..hhh',15:'.1.2..'+'^'.repeat(19)+'.a.b'}),
  L('Рычаг','Чёрный тянет рычаг клавишей S, когда стоит рядом. Синие ворота открываются, пока рычаг включён.',0,wall({11:'...........l..#',12:'.........######',13:'..............g',14:'......###.....g',15:'.1.2..........g..........a.b'},1,10)),
  L('Коробка','Коробки можно толкать. Поставьте коробку на кнопку: ворота откроются, а чёрному не придётся стоять на месте. Вторая коробка — ступенька к выходу.',0,wall({11:'..............#..........a.b',12:'..............G.........#####',13:'..............G',14:'..............G',15:'.1.2..o...k...G........o'},1,10)),
- L('Движущаяся платформа','Рычаг запускает платформу. Прыгайте на неё вместе и не падайте на шипы.',0,{15:'.1.2l.'+'^'.repeat(19)+'.a.b'},{mov:[{c:7,r:13,w:3,dx:15,dy:0,sw:1}]})
+ L('Движущаяся платформа','Рычаг запускает платформу. Прыгайте на неё вместе и не падайте на шипы.',0,{15:'.1.2l.'+'^'.repeat(19)+'.a.b'},{mov:[{c:7,r:13,w:3,dx:15,dy:0,sw:1}]}),
+ L('Подъём','Чёрный тянет рычаг (S), и лифт едет вверх. Запрыгните на него вместе.',0,{8:'.'.repeat(25)+'a.b',9:'.'.repeat(23)+'######',15:'.1.2l'},{mov:[{c:20,r:15,w:3,dx:0,dy:-6,sw:1}]}),
+ ((w)=>L('Стена','Стена слишком высока. Подтолкните коробку к ней и перелезайте по ней.',0,{12:w,13:w,14:w,15:'.1.2..o.....#'+'.'.repeat(11)+'a.b'}))('.'.repeat(12)+'#'),
+ ((m)=>{for(let i=1;i<=11;i++)m[i]='.'.repeat(10)+'#'+'.'.repeat(9)+'#';for(let i=12;i<=14;i++)m[i]='.'.repeat(10)+'G'+'.'.repeat(9)+'g';m[15]='.1.2.o..kkG....l....g...a.b';return L('Два замка','Коробка на кнопке открывает первые ворота. Рычаг в середине открывает вторые.',0,m);})({}),
+ ((m)=>{for(let i=1;i<=9;i++)m[i]='.'.repeat(14)+'#';return L('Свет на ступенях','Ступени видны и твёрдые, только пока на них светит белый. Дальше всё как в «Кнопке и тени».',1,m);})({10:'..............x',11:'...........k..x',12:'.........#####G',13:'..............G',14:'......hhh.....G',15:'.1.2..........G..........a.b'}),
+ L('Поездка в темноте','Платформа и шипы видны, только пока рядом белый. Дёрните рычаг и держитесь вместе.',1,{15:'.1.2l.'+'^'.repeat(19)+'.a.b'},{mov:[{c:7,r:13,w:3,dx:15,dy:0,sw:1}]})
 ];
 
-let lv=0,g,B,Wp,gateOpen=false,wait=0,fin=false,t0=0,lever=false,sPrev=false,boxes=[],plats=[];
+// Новые, более сложные уровни (12–16)
+const blank=()=>Array.from({length:H},()=>Array(W).fill('.'));
+const rect=(m,c0,r0,c1,r1,ch)=>{for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++)m[r][c]=ch;};
+const put=(m,c,r,ch)=>{m[r][c]=ch;};
+const mkLv=(name,hint,dark,build,ex)=>{const m=blank();build(m);return L(name,hint,dark,m.map(r=>r.join('')),ex);};
+LV.push(
+ mkLv('Падающая коробка','Столкните коробку с уступа на кнопку — она удержит ворота. Потом рычаг запустит обе платформы.',0,m=>{
+  put(m,1,15,'1');put(m,2,15,'2');
+  rect(m,3,14,6,15,'#');put(m,5,13,'o');put(m,7,15,'k');
+  rect(m,11,1,11,11,'#');rect(m,11,12,11,15,'G');
+  put(m,13,15,'l');rect(m,15,15,21,15,'^');
+  rect(m,27,9,28,14,'#');put(m,27,8,'a');put(m,28,8,'b');
+ },{mov:[{c:15,r:14,w:3,dx:4,dy:0,sw:1},{c:25,r:15,w:2,dx:0,dy:-6,sw:1}]}),
+ mkLv('Шов тени','Белый не пройдёт сквозь тень. Чёрный находит обход, дёргает рычаг и открывает ворота. Дальше — мост из света.',1,m=>{
+  put(m,1,15,'1');put(m,2,15,'2');
+  rect(m,4,14,5,15,'#');rect(m,7,12,9,12,'#');
+  rect(m,10,1,10,10,'#');put(m,10,11,'x');put(m,10,12,'#');rect(m,10,13,10,15,'g');
+  put(m,13,15,'l');rect(m,15,15,26,15,'^');
+  rect(m,16,14,17,14,'h');rect(m,20,13,21,13,'h');rect(m,24,14,25,14,'h');
+  put(m,27,15,'a');put(m,28,15,'b');
+ }),
+ mkLv('Колодец','Рычаг запускает лифт и платформу. Коробку нужно поставить на кнопку на верхнем ярусе, иначе ворота у выхода не откроются.',0,m=>{
+  put(m,1,15,'1');put(m,2,15,'2');put(m,4,15,'l');
+  rect(m,9,7,14,8,'#');rect(m,22,7,28,8,'#');
+  put(m,10,6,'o');put(m,12,6,'k');
+  rect(m,15,15,21,15,'^');
+  rect(m,24,1,24,4,'#');rect(m,24,5,24,6,'G');
+  put(m,26,6,'a');put(m,28,6,'b');
+ },{mov:[{c:6,r:15,w:3,dx:0,dy:-8,sw:1},{c:15,r:7,w:3,dx:4,dy:0,sw:1}]}),
+ mkLv('Лестница в темноте','На каждой ступени справа шип. Белый ведёт, чёрный идёт следом — не отдаляйтесь друг от друга.',1,m=>{
+  put(m,1,15,'1');put(m,2,15,'2');
+  rect(m,5,15,20,15,'^');
+  rect(m,6,14,7,14,'h');put(m,7,13,'^');
+  rect(m,9,12,10,12,'h');put(m,10,11,'^');
+  rect(m,12,10,13,10,'h');put(m,13,9,'^');
+  rect(m,15,8,16,8,'h');put(m,16,7,'^');
+  rect(m,18,6,19,6,'h');put(m,19,5,'^');
+  rect(m,21,6,28,14,'#');put(m,24,5,'a');put(m,27,5,'b');
+ }),
+ mkLv('Двое во тьме','Всё сразу: коробка и ворота, рычаг и лифт, а наверху — мост из света над шипами.',1,m=>{
+  put(m,1,15,'1');put(m,2,15,'2');
+  rect(m,3,14,6,15,'#');put(m,5,13,'o');put(m,7,15,'k');
+  rect(m,11,1,11,11,'#');rect(m,11,12,11,15,'G');
+  put(m,13,15,'l');
+  rect(m,18,7,20,8,'#');rect(m,26,7,28,8,'#');
+  rect(m,21,15,25,15,'^');
+  put(m,22,7,'h');put(m,24,6,'h');
+  put(m,27,6,'a');put(m,28,6,'b');
+ },{mov:[{c:16,r:15,w:2,dx:0,dy:-8,sw:1}]}),
+ mkLv('Две дороги','Белый не пройдёт сквозь тень. Чёрный по верхнему ярусу дёргает рычаг, чтобы белый переплыл шипы, потом держит кнопку, пока белый проходит ворота внизу.',0,m=>{
+  put(m,3,7,'1');put(m,4,7,'2');
+  rect(m,2,8,13,9,'#');
+  rect(m,14,1,14,6,'#');put(m,14,7,'x');rect(m,14,8,14,9,'#');
+  rect(m,15,8,28,9,'#');
+  put(m,6,7,'l');put(m,16,7,'^');put(m,19,7,'k');put(m,27,7,'a');
+  rect(m,6,15,11,15,'^');
+  rect(m,21,10,21,11,'#');rect(m,21,12,21,15,'G');
+  put(m,24,15,'b');
+ },{mov:[{c:6,r:14,w:3,dx:3,dy:0,sw:1}]}),
+ mkLv('Свет не держит','Белый держит световой мост, пока рядом. Переведите белого на ту сторону, поставьте коробку на мост и отойдите: мост пропадёт, и коробка упадёт на кнопку.',1,m=>{
+  put(m,1,15,'1');put(m,2,15,'2');
+  rect(m,3,14,6,15,'#');put(m,4,13,'o');
+  put(m,7,15,'k');put(m,8,15,'^');
+  rect(m,7,14,8,14,'h');
+  rect(m,9,14,12,15,'#');
+  rect(m,16,1,16,11,'#');rect(m,16,12,16,15,'G');
+  put(m,17,15,'l');rect(m,18,15,24,15,'^');
+  put(m,26,15,'a');put(m,28,15,'b');
+ },{mov:[{c:18,r:14,w:3,dx:4,dy:0,sw:1}]}),
+ mkLv('Ночной переход','Рычаг запускает платформу над шипами, дальше — лестница света, на каждой ступени шип. Белый ведёт, чёрный следом.',1,m=>{
+  put(m,1,15,'1');put(m,2,15,'2');put(m,3,15,'l');
+  rect(m,5,15,22,15,'^');
+  rect(m,15,13,16,13,'h');put(m,16,12,'^');
+  rect(m,18,11,19,11,'h');put(m,19,10,'^');
+  rect(m,21,9,22,9,'h');put(m,22,8,'^');
+  rect(m,24,9,28,14,'#');
+  put(m,25,8,'a');put(m,27,8,'b');
+ },{mov:[{c:5,r:14,w:3,dx:5,dy:0,sw:1}]}),
+ mkLv('Первый дождь','Сверху падают шипы. Эмиттер краснеет перед падением — отступите в сторону. Платформа везёт вас под дождём.',0,m=>{
+  put(m,1,15,'1');put(m,2,15,'2');put(m,4,15,'l');
+  rect(m,6,15,24,15,'^');
+  put(m,26,15,'a');put(m,28,15,'b');
+ },{mov:[{c:6,r:14,w:3,dx:16,dy:0,sw:1}],em:[{c:9,r:1,p:100,o:0},{c:13,r:1,p:100,o:25},{c:17,r:1,p:100,o:50},{c:21,r:1,p:100,o:75}]}),
+ mkLv('Лифт под дождём','Лифт, платформа над шипами и коробка на кнопке верхнего яруса — и всё это под падающими шипами.',0,m=>{
+  put(m,1,15,'1');put(m,2,15,'2');put(m,4,15,'l');
+  rect(m,9,7,14,8,'#');rect(m,24,7,28,8,'#');
+  put(m,10,6,'o');put(m,12,6,'k');
+  rect(m,15,15,23,15,'^');
+  rect(m,26,1,26,4,'#');rect(m,26,5,26,6,'G');
+  put(m,27,6,'a');put(m,28,6,'b');
+ },{mov:[{c:6,r:15,w:3,dx:0,dy:-8,sw:1},{c:15,r:7,w:3,dx:6,dy:0,sw:1}],em:[{c:7,r:1,p:110,o:0},{c:12,r:1,p:90,o:10},{c:17,r:1,p:100,o:0},{c:20,r:1,p:100,o:50},{c:25,r:1,p:100,o:30}]}),
+ mkLv('Гроза','Тьма, платформа над шипами, лестница света и шипы с неба. Не задерживайтесь на месте — и держитесь вместе.',1,m=>{
+  put(m,1,15,'1');put(m,2,15,'2');put(m,3,15,'l');
+  rect(m,5,15,25,15,'^');
+  rect(m,15,13,16,13,'h');put(m,16,12,'^');
+  rect(m,18,11,19,11,'h');put(m,19,10,'^');
+  rect(m,21,9,22,9,'h');put(m,22,8,'^');
+  rect(m,24,7,25,7,'h');put(m,25,6,'^');
+  rect(m,27,7,28,14,'#');
+  put(m,27,6,'a');put(m,28,6,'b');
+ },{mov:[{c:5,r:14,w:3,dx:5,dy:0,sw:1}],em:[{c:8,r:1,p:110,o:0},{c:11,r:1,p:110,o:55},{c:17,r:1,p:90,o:20},{c:20,r:1,p:90,o:65},{c:23,r:1,p:90,o:40},{c:26,r:1,p:100,o:0}]})
+);
+let lv=0,g,B,Wp,gateOpen=false,wait=0,fin=false,t0=0,lever=false,sPrev=false,boxes=[],plats=[],ems=[],drops=[],fc=0;
 const keys={};
 const net={role:'',room:null,peer:false,snap:null,n:0};
 const MAP={ArrowLeft:'KeyA',ArrowRight:'KeyD',ArrowUp:'KeyW',ArrowDown:'KeyS',Space:'KeyW'};
@@ -57,7 +164,7 @@ addEventListener('keyup',e=>keys[kc(e.code)]=false);
 
 const mk=(x,y,black)=>({x,y,w:20,h:20,vx:0,vy:0,g:false,black});
 function load(n){
- lv=n;wait=0;lever=false;boxes=[];plats=(LV[n].ex.mov||[]).map(m=>({x:m.c*T,y:m.r*T,w:m.w*T,h:14,ax:m.c*T,ay:m.r*T,bx:(m.c+m.dx)*T,by:(m.r+m.dy)*T,t:0,dir:1,sw:!!m.sw}));
+ lv=n;wait=0;lever=false;boxes=[];ems=LV[n].ex.em||[];drops=[];fc=0;plats=(LV[n].ex.mov||[]).map(m=>({x:m.c*T,y:m.r*T,w:m.w*T,h:14,ax:m.c*T,ay:m.r*T,bx:(m.c+m.dx)*T,by:(m.r+m.dy)*T,t:0,dir:1,sw:!!m.sw}));
  g=LV[n].rows.map(r=>r.padEnd(W,'.').slice(0,W).split(''));
  for(let r=0;r<H;r++)for(let c=0;c<W;c++){
   if(r===0||r===H-1||c===0||c===W-1)g[r][c]='#';
@@ -128,6 +235,23 @@ function ctl(p,l,r,u){
  p.vx+=(d*3.3-p.vx)*.4;
  if(keys[u]&&p.g)p.vy=-10.5;
 }
+// Падающие шипы: эмиттеры {c,r,p,o} — колонка, строка, период в кадрах, сдвиг.
+// За 45 кадров до падения эмиттер краснеет. Шип гибельный для огоньков, исчезает у стены, платформы или коробки.
+function rain(){
+ fc++;
+ for(const e of ems)if((fc+e.o)%e.p===0)drops.push({x:e.c*T+10,y:e.r*T+T,w:12,h:16,vy:0});
+ const hp=(p,d)=>p.x<d.x+d.w&&p.x+p.w>d.x&&p.y<d.y+d.h&&p.y+p.h>d.y;
+ const nd=[];
+ for(const d of drops){
+  d.vy=Math.min(d.vy+.35,8);d.y+=d.vy;
+  if(hp(B,d)||hp(Wp,d))return true;
+  const c=Math.floor((d.x+d.w/2)/T),r=Math.floor((d.y+d.h)/T);
+  if(r>=H||solid(c,r,{black:false}))continue;
+  if(plats.some(e=>hit(d,e))||boxes.some(b=>hit(d,b)))continue;
+  nd.push(d);
+ }
+ drops=nd;return false;
+}
 function step(){
  t0++;
  if(net.role==='guest'){lerpAll();return;}
@@ -139,7 +263,7 @@ function step(){
  ctl(B,'KeyA','KeyD','KeyW');
  ctl(Wp,'ArrowLeft','ArrowRight','ArrowUp');
  for(const p of [...boxes,B,Wp]){p.vy=Math.min(p.vy+.5,12);move(p);}
- if(touches(B,'^')||touches(Wp,'^')){load(lv);return;}
+ if(rain()||touches(B,'^')||touches(Wp,'^')){load(lv);return;}
  if(touches(B,'a')&&touches(Wp,'b'))wait=50;
 }
 
@@ -187,6 +311,13 @@ function draw(){
   glow(dctx,Wp.x+10,Wp.y+10,R,1);glow(dctx,B.x+10,B.y+10,R*.28,.9);
   ctx.drawImage(dk,0,0);
  }
+ for(const e of ems){
+  const ph=(fc+e.o)%e.p,w=ph>e.p-45?(ph-(e.p-45))/45:0,x=e.c*T,y=e.r*T;
+  ctx.fillStyle='#4a4d70';ctx.fillRect(x+6,y,20,10);
+  ctx.fillStyle='rgba(255,'+Math.round(110-80*w)+',100,'+(.4+.6*w)+')';
+  ctx.beginPath();ctx.moveTo(x+10,y+10);ctx.lineTo(x+22,y+10);ctx.lineTo(x+16,y+18+8*w);ctx.fill();
+ }
+ for(const d of drops){ctx.fillStyle='#ff5a6a';ctx.beginPath();ctx.moveTo(d.x,d.y);ctx.lineTo(d.x+d.w,d.y);ctx.lineTo(d.x+d.w/2,d.y+d.h);ctx.fill();}
  wisp(B);wisp(Wp);
  ctx.fillStyle='#a8abc8';ctx.font='16px Georgia,serif';ctx.textAlign='left';
  ctx.fillText('Уровень '+(lv+1)+' из '+LV.length+': '+LV[lv].name,40,26);
@@ -200,7 +331,7 @@ function draw(){
 }
 const R2=n=>Math.round(n*10)/10;
 function sendSnap(){
- net.room.emit('snap',{l:lv,b:[R2(B.x),R2(B.y)],w:[R2(Wp.x),R2(Wp.y)],o:boxes.map(b=>[R2(b.x),R2(b.y)]),p:plats.map(e=>[R2(e.x),R2(e.y)]),v:lever?1:0,g:gateOpen?1:0,wt:wait,f:fin?1:0}).catch(()=>{});
+ net.room.emit('snap',{l:lv,b:[R2(B.x),R2(B.y)],w:[R2(Wp.x),R2(Wp.y)],o:boxes.map(b=>[R2(b.x),R2(b.y)]),p:plats.map(e=>[R2(e.x),R2(e.y)]),v:lever?1:0,g:gateOpen?1:0,wt:wait,f:fin?1:0,d:drops.map(d=>[R2(d.x),R2(d.y)]),fc}).catch(()=>{});
 }
 let lastI=-1,lastT=0;
 function sendInp(){
@@ -211,6 +342,7 @@ function lerpAll(){
  const s=net.snap;if(!s)return;
  if(s.l!==lv)load(s.l);
  lever=!!s.v;gateOpen=!!s.g;wait=s.wt;fin=!!s.f;
+ drops=(s.d||[]).map(a=>({x:a[0],y:a[1],w:12,h:16}));fc=s.fc||0;
  const f=(o,t)=>{o.x+=(t[0]-o.x)*.4;o.y+=(t[1]-o.y)*.4;};
  f(B,s.b);f(Wp,s.w);
  s.o.forEach((t,i)=>boxes[i]&&f(boxes[i],t));
