@@ -468,7 +468,7 @@ function lit(c,r){
  return dx*dx+dy*dy<R*R;
 }
 function solid(c,r,p){
- const t=g[r][c];
+ const t=g[r]&&g[r][c];
  if(t==='#'||t==='i')return true;
  if(t==='c')return (cs[r*W+c]||0)<50;
  if(t==='x')return !p.black;
@@ -500,6 +500,21 @@ function move(p){
   else{p.y=e.y+e.h;p.vy=0;}
  }
 }
+// Ворота закрываются, когда ящик или огонёк стоит в проёме. Раньше физика выталкивала такой
+// предмет вверх по всему столбцу ворот и стены (ящик «улетал в небо»). Теперь предмет
+// возвращается на последнее место вне ворот — туда, откуда он в них зашёл.
+function gateState(p){
+ const x0=Math.floor(p.x/T),x1=Math.floor((p.x+p.w-.01)/T),y0=Math.floor(p.y/T),y1=Math.floor((p.y+p.h-.01)/T);
+ let any=0,closed=0;
+ for(let r=y0;r<=y1;r++)for(let c=x0;c<=x1;c++){
+  const t=g[r]&&g[r][c];
+  if(t==='G'){any=1;if(!gateOpen)closed=1;}
+  else if(t==='g'){any=1;if(!lever)closed=1;}
+ }
+ return closed?2:any;
+}
+function gateGuard(list){for(const p of list)if(p.sx!==undefined&&gateState(p)===2){p.x=p.sx;p.y=p.sy;p.vx=0;p.vy=0;}}
+function gateMark(list){for(const p of list)if(!gateState(p)){p.sx=p.x;p.sy=p.y;}}
 function movePlats(){
  for(const e of plats){
   if(e.sw&&!lever)continue;
@@ -515,7 +530,7 @@ function touches(p,ch){
  const i=ch==='^'?8:0;
  const x0=Math.floor(p.x/T),x1=Math.floor((p.x+p.w-.01)/T),y0=Math.floor(p.y/T),y1=Math.floor((p.y+p.h-.01)/T);
  for(let r=y0;r<=y1;r++)for(let c=x0;c<=x1;c++){
-  if(g[r][c]!==ch)continue;
+  if(!g[r]||g[r][c]!==ch)continue;
   if(p.x<c*T+T-i&&p.x+p.w>c*T+i&&p.y<r*T+T&&p.y+p.h>r*T+i)return true;
  }
  return false;
@@ -555,6 +570,7 @@ function step(){
  if(fin)return;
  gateOpen=touches(B,'k')||boxes.some(b=>touches(b,'k'));
  const sk=!!keys.KeyS;if(sk&&!sPrev&&touches(B,'l'))lever=!lever;sPrev=sk;
+ gateGuard([B,Wp,...boxes]);
  movePlats();
  ctl(B,'KeyA','KeyD','KeyW');
  ctl(Wp,'ArrowLeft','ArrowRight','ArrowUp');
@@ -564,6 +580,7 @@ function step(){
  }
  for(const k in cs)if(cs[k]<50)cs[k]++;
  for(const p of [...boxes,B,Wp]){p.vy=Math.min(p.vy+.5,12);move(p);}
+ gateMark([...boxes,B,Wp]);
  if(rain()||touches(B,'^')||touches(Wp,'^')){load(lv);return;}
  if(touches(B,'a')&&touches(Wp,'b'))wait=50;
 }
@@ -648,9 +665,11 @@ function sendInp(){
 // Свой (белый) огонёк на госте двигается сразу, не дожидаясь ответа хоста.
 function predictWp(){
  if(wait>0||fin||!net.snap)return;
+ gateGuard([Wp]);
  ctl(Wp,'KeyA','KeyD','KeyW');
  if(Wp.g&&touches(Wp,'s'))Wp.vy=-16;
  Wp.vy=Math.min(Wp.vy+.5,12);move(Wp);
+ gateMark([Wp]);
 }
 function lerpAll(){
  const s=net.snap;if(!s)return;
