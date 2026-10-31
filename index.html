@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Два огонька</title>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+:root{color-scheme:dark;--bg:#0c0e1a;--fg:#e9e6f5;--mut:#8f93b0;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:Georgia,"Times New Roman",serif}
+body{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}
+canvas{max-width:100%;height:auto;border-radius:6px;box-shadow:0 0 40px rgba(140,110,255,.15)}
+button,input{font:inherit;font-size:14px;background:#1c1f38;color:var(--fg);border:1px solid #3a3f6c;border-radius:4px;padding:3px 8px}
+p{margin:0;color:var(--mut);font-size:15px;text-align:center;padding:0 12px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<p>Онлайн по коду: <button id="bh">Создать комнату</button> или код <input id="ci" size="6" maxlength="8" placeholder="код"> <button id="bj">Войти</button></p>
+<p id="st"></p>
+<p>Чёрный: A / D — ходить, W — прыжок, S — рычаг &nbsp;·&nbsp; Белый: ← / → — ходить, ↑ — прыжок &nbsp;·&nbsp; R — начать уровень заново</p>
+<script>
+const T=32,W=30,H=17,R=140;
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+cv.width=W*T;cv.height=H*T;
+const dk=document.createElement('canvas');dk.width=cv.width;dk.height=cv.height;
+const dctx=dk.getContext('2d');
+
+// Легенда: # стена, 1 старт чёрного, 2 старт белого, a выход чёрного, b выход белого,
+// k кнопка (держит чёрный), G ворота, x тень (проходит только чёрный),
+// h световая платформа (твёрдая, пока на неё светит белый), ^ шипы
+const L=(name,hint,dark,m,ex)=>({name,hint,dark,ex:ex||{},rows:Array.from({length:H},(_,i)=>m[i]||'')});
+const wall=(m,a,b)=>{for(let i=a;i<=b;i++)m[i]='..............#';return m;};
+const l2={10:'..............x',11:'...........k..x',12:'.........#####G',13:'..............G',14:'......###.....G',15:'.1.2..........G..........a.b'};
+for(let i=1;i<=9;i++)l2[i]='..............#';
+const LV=[
+ L('Первые шаги','Оба огонька должны дойти до своих выходов.',0,{
+  15:'.1.2',13:'...........####',11:'..................####',9:'.........................####',8:'..........................a.b'}),
+ L('Кнопка и тень','Чёрный держит кнопку, пока белый проходит в ворота. Сквозь тень может пройти только чёрный.',0,l2),
+ L('Свет во тьме','Платформы видны и твёрдые, только пока на них светит белый. Держитесь рядом.',1,{
+  13:'.......hhh..hhh..hhh..hhh',15:'.1.2..'+'^'.repeat(19)+'.a.b'}),
+ L('Рычаг','Чёрный тянет рычаг клавишей S, когда стоит рядом. Синие ворота открываются, пока рычаг включён.',0,wall({11:'...........l..#',12:'.........######',13:'..............g',14:'......###.....g',15:'.1.2..........g..........a.b'},1,10)),
+ L('Коробка','Коробки можно толкать. Поставьте коробку на кнопку: ворота откроются, а чёрному не придётся стоять на месте. Вторая коробка — ступенька к выходу.',0,wall({11:'..............#..........a.b',12:'..............G.........#####',13:'..............G',14:'..............G',15:'.1.2..o...k...G........o'},1,10)),
+ L('Движущаяся платформа','Рычаг запускает платформу. Прыгайте на неё вместе и не падайте на шипы.',0,{15:'.1.2l.'+'^'.repeat(19)+'.a.b'},{mov:[{c:7,r:13,w:3,dx:15,dy:0,sw:1}]})
+];
+
+let lv=0,g,B,Wp,gateOpen=false,wait=0,fin=false,t0=0,lever=false,sPrev=false,boxes=[],plats=[];
+const keys={};
+const net={role:'',room:null,peer:false,snap:null,n:0};
+const MAP={ArrowLeft:'KeyA',ArrowRight:'KeyD',ArrowUp:'KeyW',ArrowDown:'KeyS',Space:'KeyW'};
+const kc=c=>net.role?(MAP[c]||c):c;
+addEventListener('keydown',e=>{keys[kc(e.code)]=true;
+ if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();
+ if(e.code==='KeyR'&&!fin&&net.role!=='guest')load(lv);});
+addEventListener('keyup',e=>keys[kc(e.code)]=false);
+
+const mk=(x,y,black)=>({x,y,w:20,h:20,vx:0,vy:0,g:false,black});
+function load(n){
+ lv=n;wait=0;lever=false;boxes=[];plats=(LV[n].ex.mov||[]).map(m=>({x:m.c*T,y:m.r*T,w:m.w*T,h:14,ax:m.c*T,ay:m.r*T,bx:(m.c+m.dx)*T,by:(m.r+m.dy)*T,t:0,dir:1,sw:!!m.sw}));
+ g=LV[n].rows.map(r=>r.padEnd(W,'.').slice(0,W).split(''));
+ for(let r=0;r<H;r++)for(let c=0;c<W;c++){
+  if(r===0||r===H-1||c===0||c===W-1)g[r][c]='#';
+  const ch=g[r][c];
+  if(ch==='1'){B=mk(c*T+6,r*T+T-20,true);g[r][c]='.';}
+  if(ch==='2'){Wp=mk(c*T+6,r*T+T-20,false);g[r][c]='.';}
+  if(ch==='o'){boxes.push({x:c*T,y:r*T,w:T,h:T,vx:0,vy:0,g:false,box:1});g[r][c]='.';}
+ }
+}
+function lit(c,r){
+ const dx=(c+.5)*T-(Wp.x+10),dy=(r+.5)*T-(Wp.y+10);
+ return dx*dx+dy*dy<R*R;
+}
+function solid(c,r,p){
+ const t=g[r][c];
+ if(t==='#')return true;
+ if(t==='x')return !p.black;
+ if(t==='G')return !gateOpen;
+ if(t==='g')return !lever;
+ if(t==='h')return lit(c,r);
+ return false;
+}
+function collide(p,hx){
+ const x0=Math.floor(p.x/T),x1=Math.floor((p.x+p.w-.01)/T),y0=Math.floor(p.y/T),y1=Math.floor((p.y+p.h-.01)/T);
+ for(let r=y0;r<=y1;r++)for(let c=x0;c<=x1;c++){
+  if(!solid(c,r,p))continue;
+  if(hx){if(p.vx>0)p.x=c*T-p.w;else if(p.vx<0)p.x=(c+1)*T;p.vx=0;}
+  else{if(p.vy>0){p.y=r*T-p.h;p.g=true;}else if(p.vy<0)p.y=(r+1)*T;p.vy=0;}
+ }
+}
+function hit(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;}
+function move(p){
+ const o=plats.concat(boxes.filter(b=>b!==p));
+ p.x+=p.vx;collide(p,true);
+ for(const e of o)if(hit(p,e)){
+  if(e.box&&!p.box&&p.vx){const x0=e.x;e.x+=p.vx;e.vx=p.vx;collide(e,true);e.vx=0;
+   if(o.some(f=>f!==e&&f.box&&hit(e,f))||hit(e,B===p?Wp:B))e.x=x0;}
+  if(hit(p,e))p.x=p.vx>0?e.x-p.w:e.x+e.w;
+ }
+ p.g=false;p.ride=null;p.y+=p.vy;collide(p,false);
+ for(const e of o)if(hit(p,e)){
+  if(p.vy>=0){p.y=e.y-p.h;p.g=true;p.vy=0;p.ride=e;}
+  else{p.y=e.y+e.h;p.vy=0;}
+ }
+}
+function movePlats(){
+ for(const e of plats){
+  if(e.sw&&!lever)continue;
+  const len=Math.hypot(e.bx-e.ax,e.by-e.ay);
+  e.t+=1.3/len*e.dir;
+  if(e.t>=1||e.t<=0){e.t=Math.max(0,Math.min(1,e.t));e.dir*=-1;}
+  const nx=e.ax+(e.bx-e.ax)*e.t,ny=e.ay+(e.by-e.ay)*e.t,dx=nx-e.x,dy=ny-e.y;
+  for(const q of [B,Wp,...boxes])if(q.ride===e){q.x+=dx;q.y+=dy;}
+  e.x=nx;e.y=ny;
+ }
+}
+function touches(p,ch){
+ const i=ch==='^'?8:0;
+ const x0=Math.floor(p.x/T),x1=Math.floor((p.x+p.w-.01)/T),y0=Math.floor(p.y/T),y1=Math.floor((p.y+p.h-.01)/T);
+ for(let r=y0;r<=y1;r++)for(let c=x0;c<=x1;c++){
+  if(g[r][c]!==ch)continue;
+  if(p.x<c*T+T-i&&p.x+p.w>c*T+i&&p.y<r*T+T&&p.y+p.h>r*T+i)return true;
+ }
+ return false;
+}
+function ctl(p,l,r,u){
+ const d=(keys[r]?1:0)-(keys[l]?1:0);
+ p.vx+=(d*3.3-p.vx)*.4;
+ if(keys[u]&&p.g)p.vy=-10.5;
+}
+function step(){
+ t0++;
+ if(net.role==='guest'){lerpAll();return;}
+ if(net.role==='host'&&!net.peer)return;
+ if(wait>0){wait--;if(wait===0){if(lv+1<LV.length)load(lv+1);else fin=true;}return;}
+ if(fin)return;
+ gateOpen=touches(B,'k')||boxes.some(b=>touches(b,'k'));
+ const sk=!!keys.KeyS;if(sk&&!sPrev&&touches(B,'l'))lever=!lever;sPrev=sk;
+ movePlats();
+ ctl(B,'KeyA','KeyD','KeyW');
+ ctl(Wp,'ArrowLeft','ArrowRight','ArrowUp');
+ for(const p of [...boxes,B,Wp]){p.vy=Math.min(p.vy+.5,12);move(p);}
+ if(touches(B,'^')||touches(Wp,'^')){load(lv);return;}
+ if(touches(B,'a')&&touches(Wp,'b'))wait=50;
+}
+
+function glow(c,x,y,r,a){
+ const gr=c.createRadialGradient(x,y,r*.25,x,y,r);
+ gr.addColorStop(0,'rgba(0,0,0,'+a+')');gr.addColorStop(1,'rgba(0,0,0,0)');
+ c.fillStyle=gr;c.beginPath();c.arc(x,y,r,0,7);c.fill();
+}
+function ring(x,y,col){
+ ctx.strokeStyle=col;ctx.lineWidth=3;
+ ctx.beginPath();ctx.arc(x+T/2,y+T/2,11+Math.sin(t0/12)*1.5,0,7);ctx.stroke();
+}
+function wisp(p){
+ const cx=p.x+10,cy=p.y+9+Math.sin(t0/10+(p.black?0:2))*1.2;
+ const gr=ctx.createRadialGradient(cx,cy,4,cx,cy,26);
+ gr.addColorStop(0,p.black?'rgba(150,110,255,.5)':'rgba(255,248,210,.7)');gr.addColorStop(1,'rgba(0,0,0,0)');
+ ctx.fillStyle=gr;ctx.beginPath();ctx.arc(cx,cy,26,0,7);ctx.fill();
+ ctx.fillStyle=p.black?'#07070d':'#fffbea';
+ ctx.strokeStyle=p.black?'#a98bff':'#ffe9a0';ctx.lineWidth=2;
+ ctx.beginPath();ctx.arc(cx,cy,11,0,7);ctx.fill();ctx.stroke();
+ ctx.fillStyle=p.black?'#fffbea':'#201a33';
+ ctx.fillRect(cx-5,cy-3,3,5);ctx.fillRect(cx+2,cy-3,3,5);
+}
+function draw(){
+ ctx.fillStyle='#12142a';ctx.fillRect(0,0,cv.width,cv.height);
+ for(let r=0;r<H;r++)for(let c=0;c<W;c++){
+  const t=g[r][c],x=c*T,y=r*T;
+  if(t==='#'){ctx.fillStyle='#2a2d4d';ctx.fillRect(x,y,T,T);ctx.strokeStyle='#3a3f6c';ctx.lineWidth=1;ctx.strokeRect(x+.5,y+.5,T-1,T-1);}
+  else if(t==='x'){ctx.fillStyle='rgba(120,70,210,.5)';ctx.fillRect(x,y,T,T);ctx.strokeStyle='#8a5cf0';ctx.strokeRect(x+2,y+2,T-4,T-4);}
+  else if(t==='G'){ctx.fillStyle=gateOpen?'rgba(240,170,60,.15)':'#e8a13a';ctx.fillRect(x+9,y,14,T);}
+  else if(t==='k'){ctx.fillStyle=gateOpen?'#ffd98a':'#9a6a22';ctx.fillRect(x+4,y+T-8,T-8,8);}
+  else if(t==='g'){ctx.fillStyle=lever?'rgba(90,190,255,.15)':'#3fa9e0';ctx.fillRect(x+9,y,14,T);}
+  else if(t==='l'){ctx.fillStyle='#6b5a2a';ctx.fillRect(x+8,y+T-6,16,6);ctx.strokeStyle=lever?'#7bd5ff':'#b5b5c5';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(x+16,y+T-6);ctx.lineTo(x+(lever?26:6),y+8);ctx.stroke();}
+  else if(t==='^'){ctx.fillStyle='#e0505f';ctx.beginPath();ctx.moveTo(x+3,y+T);ctx.lineTo(x+T/2,y+8);ctx.lineTo(x+T-3,y+T);ctx.fill();}
+  else if(t==='a')ring(x,y,'#9d7cff');
+  else if(t==='b')ring(x,y,'#fff1b8');
+  else if(t==='h'&&lit(c,r)){ctx.fillStyle='rgba(255,243,176,.85)';ctx.fillRect(x,y,T,T);}
+ }
+ for(const e of plats){ctx.fillStyle='#7d85c9';ctx.fillRect(e.x,e.y,e.w,e.h);}
+ for(const b of boxes){ctx.fillStyle='#8a6a3b';ctx.fillRect(b.x,b.y,b.w,b.h);ctx.strokeStyle='#c49a5a';ctx.lineWidth=2;ctx.strokeRect(b.x+2,b.y+2,b.w-4,b.h-4);}
+ if(LV[lv].dark){
+  dctx.globalCompositeOperation='source-over';
+  dctx.fillStyle='rgba(2,3,9,.97)';dctx.fillRect(0,0,dk.width,dk.height);
+  dctx.globalCompositeOperation='destination-out';
+  glow(dctx,Wp.x+10,Wp.y+10,R,1);glow(dctx,B.x+10,B.y+10,R*.28,.9);
+  ctx.drawImage(dk,0,0);
+ }
+ wisp(B);wisp(Wp);
+ ctx.fillStyle='#a8abc8';ctx.font='16px Georgia,serif';ctx.textAlign='left';
+ ctx.fillText('Уровень '+(lv+1)+' из '+LV.length+': '+LV[lv].name,40,26);
+ ctx.fillStyle='#8f93b0';ctx.font='14px Georgia,serif';
+ ctx.fillText(LV[lv].hint,40,H*T-40);
+ if(wait>0||fin){
+  ctx.fillStyle='rgba(8,9,20,.7)';ctx.fillRect(0,0,cv.width,cv.height);
+  ctx.fillStyle='#fff1b8';ctx.font='32px Georgia,serif';ctx.textAlign='center';
+  ctx.fillText(fin?'Все уровни пройдены':'Уровень пройден',cv.width/2,cv.height/2);
+ }
+}
+const R2=n=>Math.round(n*10)/10;
+function sendSnap(){
+ net.room.emit('snap',{l:lv,b:[R2(B.x),R2(B.y)],w:[R2(Wp.x),R2(Wp.y)],o:boxes.map(b=>[R2(b.x),R2(b.y)]),p:plats.map(e=>[R2(e.x),R2(e.y)]),v:lever?1:0,g:gateOpen?1:0,wt:wait,f:fin?1:0}).catch(()=>{});
+}
+let lastI=-1,lastT=0;
+function sendInp(){
+ const i=(keys.KeyA?1:0)+(keys.KeyD?2:0)+(keys.KeyW?4:0),now=performance.now();
+ if(i!==lastI||now-lastT>150){lastI=i;lastT=now;net.room.emit('inp',{i}).catch(()=>{});}
+}
+function lerpAll(){
+ const s=net.snap;if(!s)return;
+ if(s.l!==lv)load(s.l);
+ lever=!!s.v;gateOpen=!!s.g;wait=s.wt;fin=!!s.f;
+ const f=(o,t)=>{o.x+=(t[0]-o.x)*.4;o.y+=(t[1]-o.y)*.4;};
+ f(B,s.b);f(Wp,s.w);
+ s.o.forEach((t,i)=>boxes[i]&&f(boxes[i],t));
+ s.p.forEach((t,i)=>plats[i]&&f(plats[i],t));
+}
+function mkRoom(){
+ const hs={};let conn=null;
+ return{
+  setConn(c){conn=c;c.on('data',m=>{(hs[m.t]||[]).forEach(h=>h({isMe:false,data:m.d}));});},
+  emit(t,d){if(conn&&conn.open)conn.send({t,d});return Promise.resolve();},
+  on(t,h){(hs[t]=hs[t]||[]).push(h);}
+ };
+}
+async function goOnline(role,code){
+ if(net.role)return;
+ const st=document.getElementById('st');
+ try{
+  const rm=mkRoom();net.room=rm;
+  if(role==='host'){
+   const peer=new Peer('twowisps-'+code);
+   await new Promise((ok,no)=>{peer.on('open',ok);peer.on('error',no);});
+   peer.on('connection',c=>{if(!net.conn){net.conn=c;c.on('open',()=>rm.setConn(c));}});
+  }else{
+   const peer=new Peer();
+   await new Promise((ok,no)=>{peer.on('open',ok);peer.on('error',no);});
+   const c=peer.connect('twowisps-'+code);
+   await new Promise((ok,no)=>{c.on('open',ok);c.on('error',no);setTimeout(()=>no({type:'timeout'}),10000);});
+   rm.setConn(c);
+  }
+ }catch(e){st.textContent='Не удалось подключиться ('+((e&&(e.type||e.code))||'ошибка')+'). Проверьте код.';net.room=null;return;}
+ net.role=role;net.peer=false;net.snap=null;
+ net.room.on('inp',m=>{
+  if(m.isMe||net.role!=='host')return;
+  const d=m.data||{};
+  keys.ArrowLeft=!!(d.i&1);keys.ArrowRight=!!(d.i&2);keys.ArrowUp=!!(d.i&4);
+  if(!net.peer){net.peer=true;st.textContent='Игра идёт. Вы — чёрный: A / D, W — прыжок, S — рычаг (можно и стрелками).';}
+ });
+ net.room.on('snap',m=>{if(m.isMe||net.role!=='guest')return;net.snap=m.data;});
+ load(0);
+ st.textContent=role==='host'?'Код комнаты: '+code.toUpperCase()+'. Скажите его второму игроку и ждите…':'Подключаемся к хосту… Вы — белый: стрелки или WASD.';
+}
+let last=0,acc=0;
+function frame(t){acc+=Math.min(t-last,100);last=t;while(acc>=16.67){step();acc-=16.67;}if(net.role==='host'&&net.peer&&++net.n%3===0)sendSnap();
+ if(net.role==='guest')sendInp();
+ draw();requestAnimationFrame(frame);}
+load(0);
+document.getElementById('bh').onclick=()=>goOnline('host',Math.random().toString(36).slice(2,6).padEnd(4,'x'));
+document.getElementById('bj').onclick=()=>{
+ const c=document.getElementById('ci').value.trim().toLowerCase();
+ if(/^[a-z0-9]{3,8}$/.test(c))goOnline('guest',c);
+ else document.getElementById('st').textContent='Введите код комнаты от хоста.';
+};
+requestAnimationFrame(t=>{last=t;frame(t);});
+</script>
+</body>
+</html>
