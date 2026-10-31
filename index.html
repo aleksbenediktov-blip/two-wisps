@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Два огонька</title>
-<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
 <style>
 :root{color-scheme:dark;--bg:#0c0e1a;--fg:#e9e6f5;--mut:#8f93b0;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
@@ -17,7 +17,7 @@ p{margin:0;color:var(--mut);font-size:15px;text-align:center;padding:0 12px}
 </head>
 <body>
 <canvas id="c"></canvas>
-<p>Онлайн по коду: <button id="bh">Создать комнату</button> или код <input id="ci" size="6" maxlength="8" placeholder="код"> <button id="bj">Войти</button></p>
+<p>Онлайн по коду (через сервер Ably): <button id="bh">Создать комнату</button> или код <input id="ci" size="6" maxlength="8" placeholder="код"> <button id="bj">Войти</button></p>
 <p id="st"></p>
 <p>Чёрный: A / D — ходить, W — прыжок, S — рычаг &nbsp;·&nbsp; Белый: ← / → — ходить, ↑ — прыжок &nbsp;·&nbsp; R — начать уровень заново</p>
 <script>
@@ -216,31 +216,31 @@ function lerpAll(){
  s.o.forEach((t,i)=>boxes[i]&&f(boxes[i],t));
  s.p.forEach((t,i)=>plats[i]&&f(plats[i],t));
 }
-function mkRoom(){
- const hs={};let conn=null;
+const ABLY_KEY='BuaNjw.wvk6OA:BbLljLhlL6wbLlCv20OFj8vfR8kBdIqb72IK8cq0XeQ';
+function mkRoom(code){
+ const id=Math.random().toString(36).slice(2),hs={};
+ const ab=new Ably.Realtime({key:ABLY_KEY,echoMessages:false});
+ const ch=ab.channels.get('twowisps-'+code);
+ ch.subscribe('m',msg=>{const m=msg.data;if(!m||m.f===id)return;(hs[m.t]||[]).forEach(h=>h({isMe:false,data:m.d}));});
  return{
-  setConn(c){conn=c;c.on('data',m=>{(hs[m.t]||[]).forEach(h=>h({isMe:false,data:m.d}));});},
-  emit(t,d){if(conn&&conn.open)conn.send({t,d});return Promise.resolve();},
+  ready:()=>new Promise((ok,no)=>{
+   if(ab.connection.state==='connected')return ok();
+   ab.connection.once('connected',ok);
+   ab.connection.once('failed',()=>no({type:'ably-failed'}));
+   setTimeout(()=>no({type:'timeout'}),15000);
+  }),
+  emit(t,d){try{const p=ch.publish('m',{t,d,f:id});if(p&&p.catch)p.catch(()=>{});}catch(e){}return Promise.resolve();},
   on(t,h){(hs[t]=hs[t]||[]).push(h);}
  };
 }
 async function goOnline(role,code){
  if(net.role)return;
  const st=document.getElementById('st');
+ if(ABLY_KEY.indexOf('ВСТАВЬТЕ')>=0){st.textContent='В файле не вписан ключ Ably (ABLY_KEY).';return;}
  try{
-  const rm=mkRoom();net.room=rm;
-  if(role==='host'){
-   const peer=new Peer('twowisps-'+code);
-   await new Promise((ok,no)=>{peer.on('open',ok);peer.on('error',no);});
-   peer.on('connection',c=>{if(!net.conn){net.conn=c;st.textContent='Второй игрок подключается…';c.on('open',()=>rm.setConn(c));}});
-  }else{
-   const peer=new Peer();
-   await new Promise((ok,no)=>{peer.on('open',ok);peer.on('error',no);});
-   const c=peer.connect('twowisps-'+code);
-   await new Promise((ok,no)=>{c.on('open',ok);c.on('error',no);peer.on('error',no);setTimeout(()=>no({type:'timeout'}),20000);});
-   rm.setConn(c);
-  }
- }catch(e){const ty=(e&&(e.type||e.code))||'ошибка';const M={'peer-unavailable':'комната с таким кодом не найдена: хост должен нажать «Создать комнату» и не закрывать вкладку','timeout':'прямая связь не установилась: отключите VPN и блокировщики или попробуйте с другого интернета'};st.textContent='Не удалось подключиться ('+ty+'): '+(M[ty]||'проверьте код и интернет')+'.';net.room=null;return;}
+  const rm=mkRoom(code);net.room=rm;
+  await rm.ready();
+ }catch(e){const ty=(e&&(e.type||e.code))||'ошибка';st.textContent='Нет связи с сервером Ably ('+ty+'): проверьте ключ и интернет.';net.room=null;return;}
  net.role=role;net.peer=false;net.snap=null;
  net.room.on('inp',m=>{
   if(m.isMe||net.role!=='host')return;
@@ -248,12 +248,13 @@ async function goOnline(role,code){
   keys.ArrowLeft=!!(d.i&1);keys.ArrowRight=!!(d.i&2);keys.ArrowUp=!!(d.i&4);
   if(!net.peer){net.peer=true;st.textContent='Игра идёт. Вы — чёрный: A / D, W — прыжок, S — рычаг (можно и стрелками).';}
  });
- net.room.on('snap',m=>{if(m.isMe||net.role!=='guest')return;net.snap=m.data;});
+ net.room.on('snap',m=>{if(m.isMe||net.role!=='guest')return;if(!net.snap)st.textContent='Подключено. Вы — белый: стрелки или WASD.';net.snap=m.data;});
+ if(role==='guest')setTimeout(()=>{if(net.role==='guest'&&!net.snap)st.textContent='Хост не отвечает: проверьте код. Хост должен нажать «Создать комнату» и не закрывать вкладку.';},8000);
  load(0);
  st.textContent=role==='host'?'Код комнаты: '+code.toUpperCase()+'. Скажите его второму игроку и ждите…':'Подключаемся к хосту… Вы — белый: стрелки или WASD.';
 }
 let last=0,acc=0;
-function frame(t){acc+=Math.min(t-last,100);last=t;while(acc>=16.67){step();acc-=16.67;}if(net.role==='host'&&net.peer&&++net.n%3===0)sendSnap();
+function frame(t){acc+=Math.min(t-last,100);last=t;while(acc>=16.67){step();acc-=16.67;}if(net.role==='host'&&net.peer&&++net.n%4===0)sendSnap();
  if(net.role==='guest')sendInp();
  draw();requestAnimationFrame(frame);}
 load(0);
