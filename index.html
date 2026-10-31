@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Два огонька</title>
-<script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
 <style>
 :root{color-scheme:dark;--bg:#0c0e1a;--fg:#e9e6f5;--mut:#8f93b0;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
@@ -16,11 +15,10 @@ p{margin:0;color:var(--mut);font-size:15px;text-align:center;padding:0 12px}
 
 /* ---------- Мобильное управление ---------- */
 body{box-sizing:border-box;overscroll-behavior:none}
-#stage,#lobby{display:contents}
+#stage{display:contents}
 .pad,#tb,#rot{display:none}
 body.touch{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
-body.touch input{-webkit-user-select:text;user-select:text}
-body.touch button,body.touch input{font-size:16px;padding:8px 12px}
+body.touch button{font-size:16px;padding:8px 12px}
 body.touch #stage{display:grid;grid-template-columns:1fr 1fr;grid-template-areas:"cv cv" "pl pr";gap:12px 8px;width:100%;box-sizing:border-box;align-items:end;
  padding:0 max(10px,env(safe-area-inset-right)) 0 max(10px,env(safe-area-inset-left));--bs:clamp(46px,15vw,66px)}
 body.touch canvas{grid-area:cv;width:100%;justify-self:center;align-self:center}
@@ -35,39 +33,27 @@ body.touch .pad button.on{background:rgba(160,130,255,.75);transform:scale(.94)}
 body.touch .pad.pw button.on{background:rgba(255,233,160,.55)}
 body.touch .pad button.wide{grid-column:span 2;width:100%}
 body.touch .pad button.lv{font-size:12px;line-height:1.1}
-body.touch #lobby{display:flex;flex-direction:column;gap:10px;align-items:center}
 body.touch .kbd{display:none}
 body.touch #rot{display:block}
 body.touch #tb{display:flex;gap:6px;position:fixed;z-index:20;top:max(6px,env(safe-area-inset-top));right:max(8px,env(safe-area-inset-right))}
 body.touch #tb button{width:42px;height:42px;padding:0;font-size:20px;border-radius:10px;background:rgba(28,31,56,.85)}
-#mb{display:none!important}
-#ni{position:fixed;z-index:5;pointer-events:none;top:max(6px,env(safe-area-inset-top));left:max(8px,env(safe-area-inset-left));font:12px/1.2 system-ui,sans-serif;color:var(--mut)}
 @media (orientation:landscape){
  body.touch #rot{display:none}
  body.touch #stage{grid-template-columns:auto 1fr auto;grid-template-areas:"pl cv pr";height:100%;gap:6px;--bs:clamp(42px,13vh,60px)}
  body.touch canvas{width:min(100%,calc((100vh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))*1.7647));
   width:min(100%,calc((100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))*1.7647))}
  body.touch .pad{align-self:end;margin-bottom:6px}
- body.touch #lobby{display:none}
- body.touch.menu #lobby{display:flex;position:fixed;z-index:10;left:50%;top:50%;transform:translate(-50%,-50%);max-width:80vw;
-  background:rgba(12,14,26,.97);border:1px solid #3a3f6c;border-radius:10px;padding:14px 16px;box-shadow:0 0 40px rgba(0,0,0,.6)}
- body.touch #mb{display:block!important}
 }
 </style>
 </head>
 <body>
-<div id="ni"></div>
-<div id="tb"><button id="rs" type="button" title="Начать уровень заново">↺</button><button id="mb" type="button" title="Комната">☰</button></div>
+<div id="tb"><button id="rs" type="button" title="Начать уровень заново">↺</button></div>
 <div id="stage">
 <div class="pad" id="padL"></div>
 <canvas id="c"></canvas>
 <div class="pad" id="padR"></div>
 </div>
 <p id="rot">Поверните телефон горизонтально — так играть удобнее.</p>
-<div id="lobby">
-<p>Онлайн по коду (через сервер Ably): <button id="bh">Создать комнату</button> или код <input id="ci" size="6" maxlength="8" placeholder="код" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"> <button id="bj">Войти</button></p>
-<p id="st"></p>
-</div>
 <p class="kbd">Чёрный: A / D — ходить, W — прыжок, S — рычаг &nbsp;·&nbsp; Белый: ← / → — ходить, ↑ — прыжок &nbsp;·&nbsp; R — начать уровень заново</p>
 <script>
 const T=32,W=30,H=17,R=140;
@@ -442,14 +428,10 @@ LV.push(
 );
 let lv=0,g,B,Wp,cs={},gateOpen=false,wait=0,fin=false,t0=0,lever=false,sPrev=false,boxes=[],plats=[],ems=[],drops=[],fc=0;
 const keys={};
-const net={role:'',room:null,peer:false,snap:null,n:0,q:0,ln:-1,pg:'',rtt:0};
-let still=0,lastSnapStr='',lastSnapT=0,lastI=-1,lastT=0,inpN=0,lastNi=0;
-const MAP={ArrowLeft:'KeyA',ArrowRight:'KeyD',ArrowUp:'KeyW',ArrowDown:'KeyS',Space:'KeyW'};
-const kc=c=>net.role?(MAP[c]||c):c;
-addEventListener('keydown',e=>{keys[kc(e.code)]=true;
+addEventListener('keydown',e=>{keys[e.code]=true;
  if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();
- if(e.code==='KeyR'&&!fin&&net.role!=='guest')load(lv);});
-addEventListener('keyup',e=>keys[kc(e.code)]=false);
+ if(e.code==='KeyR'&&!fin)load(lv);});
+addEventListener('keyup',e=>keys[e.code]=false);
 
 const mk=(x,y,black)=>({x,y,w:20,h:20,vx:0,vy:0,g:false,black});
 function load(n){
@@ -565,7 +547,6 @@ function rain(){
 }
 function step(){
  t0++;
- if(net.role==='guest'){lerpAll();predictWp();return;}
  if(wait>0){wait--;if(wait===0){if(lv+1<LV.length)load(lv+1);else fin=true;}return;}
  if(fin)return;
  gateOpen=touches(B,'k')||boxes.some(b=>touches(b,'k'));
@@ -650,167 +631,6 @@ function draw(){
   ctx.fillText(fin?'Все уровни пройдены':'Уровень пройден',cv.width/2,cv.height/2);
  }
 }
-const R2=n=>Math.round(n*10)/10;
-function sendSnap(){
- const o={l:lv,b:[R2(B.x),R2(B.y)],w:[R2(Wp.x),R2(Wp.y)],o:boxes.map(b=>[R2(b.x),R2(b.y)]),p:plats.map(e=>[R2(e.x),R2(e.y)]),v:lever?1:0,g:gateOpen?1:0,wt:wait,f:fin?1:0,d:drops.map(d=>[R2(d.x),R2(d.y)]),fc,cs};
- const str=JSON.stringify(o),now=performance.now();
- if(str===lastSnapStr&&now-lastSnapT<400)return; // ничего не изменилось — не шлём (экономит трафик)
- lastSnapStr=str;lastSnapT=now;o.q=++net.q;
- net.room.emit('snap',o).catch(()=>{});
-}
-function sendInp(){
- const i=(keys.KeyA?1:0)+(keys.KeyD?2:0)+(keys.KeyW?4:0),now=performance.now();
- if(i!==lastI||now-lastT>(net.room.p2p?50:150)){lastI=i;lastT=now;net.room.emit('inp',{i,n:++inpN,g:net.room.gid}).catch(()=>{});}
-}
-// Свой (белый) огонёк на госте двигается сразу, не дожидаясь ответа хоста.
-function predictWp(){
- if(wait>0||fin||!net.snap)return;
- gateGuard([Wp]);
- ctl(Wp,'KeyA','KeyD','KeyW');
- if(Wp.g&&touches(Wp,'s'))Wp.vy=-16;
- Wp.vy=Math.min(Wp.vy+.5,12);move(Wp);
- gateMark([Wp]);
-}
-function lerpAll(){
- const s=net.snap;if(!s)return;
- if(s.l!==lv)load(s.l);
- lever=!!s.v;gateOpen=!!s.g;wait=s.wt;fin=!!s.f;
- drops=(s.d||[]).map(a=>({x:a[0],y:a[1],w:12,h:16}));fc=s.fc||0;cs=s.cs||{};
- const K=.5,f=(o,t)=>{o.x+=(t[0]-o.x)*K;o.y+=(t[1]-o.y)*K;};
- f(B,s.b);
- s.o.forEach((t,i)=>boxes[i]&&f(boxes[i],t));
- s.p.forEach((t,i)=>{const e=plats[i];if(!e)return;const ox=e.x,oy=e.y;f(e,t);if(Wp.ride===e){Wp.x+=e.x-ox;Wp.y+=e.y-oy;}});
- const ex=s.w[0]-Wp.x,ey=s.w[1]-Wp.y,d=Math.hypot(ex,ey);
- const idle=!keys.KeyA&&!keys.KeyD&&!keys.KeyW;
- still=(idle&&Wp.g&&Math.abs(Wp.vx)<.3)?still+1:0;
- if(wait>0||fin)f(Wp,s.w);
- else{ // сервер поправляет предсказание, только если разошлись сильно или игрок стоит
-  const k=d>140?1:d>96?.3:(still>40&&d>.4)?.25:0;
-  if(k){Wp.x+=ex*k;Wp.y+=ey*k;if(k===1)Wp.vx=Wp.vy=0;}
- }
-}
-function updNi(){
- const el=document.getElementById('ni');
- if(!net.role||!net.room){el.textContent='';return;}
- const r=Math.round(net.rtt||0);
- el.textContent=(net.room.p2p?'напрямую (P2P)':'через сервер')+(r?' · '+r+' мс':'');
-}
-const ABLY_KEY='BuaNjw.wvk6OA:BbLljLhlL6wbLlCv20OFj8vfR8kBdIqb72IK8cq0XeQ';
-// Связь: сначала всё идёт через Ably (всегда работает), параллельно пробуем
-// прямое соединение WebRTC (Ably служит для обмена адресами). Если прямое открылось —
-// игра идёт напрямую (меньше задержка), если нет — остаётся через Ably.
-const ICE={iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'},{urls:'stun:stun.cloudflare.com:3478'}]};
-function mkRoom(code,role){
- const id=Math.random().toString(36).slice(2),hs={};
- const ab=new Ably.Realtime({key:ABLY_KEY,echoMessages:false});
- const ch=ab.channels.get('twowisps-'+code);
- const fire=(t,d)=>(hs[t]||[]).forEach(h=>h({isMe:false,data:d}));
- ch.subscribe('m',msg=>{const m=msg.data;if(!m||m.f===id)return;fire(m.t,m.d);});
- const room={p2p:false,gid:Math.random().toString(36).slice(2),onp2p:null};
- let pc=null,dc=null,peer=role==='guest'?room.gid:'',pend=[];
- const relay=(t,d)=>{try{const p=ch.publish('m',{t,d,f:id});if(p&&p.catch)p.catch(()=>{});}catch(e){}};
- const sig=(k,x)=>relay('rtc',Object.assign({k,g:peer},x));
- const note=()=>{if(room.onp2p)room.onp2p();};
- function closeRtc(){try{if(dc)dc.close();}catch(e){}try{if(pc)pc.close();}catch(e){}pc=dc=null;pend=[];room.p2p=false;}
- function wireDc(d){
-  dc=d;
-  d.onopen=()=>{if(dc===d){room.p2p=true;note();}};
-  d.onclose=()=>{if(dc===d){room.p2p=false;note();}};
-  d.onmessage=e=>{let m;try{m=JSON.parse(e.data);}catch(_){return;}if(m&&m.t)fire(m.t,m.d);};
- }
- function newPc(){
-  const c=new RTCPeerConnection(ICE);pc=c;
-  c.onicecandidate=e=>{if(e.candidate)sig('ice',{c:e.candidate.toJSON?e.candidate.toJSON():e.candidate});};
-  c.onconnectionstatechange=()=>{if(c===pc&&(c.connectionState==='failed'||c.connectionState==='closed')){room.p2p=false;note();}};
-  return c;
- }
- const desc=c=>({type:c.localDescription.type,sdp:c.localDescription.sdp});
- async function flush(c){for(const x of pend.splice(0))await c.addIceCandidate(x).catch(()=>{});}
- async function hostStart(g){
-  closeRtc();peer=g;
-  if(typeof RTCPeerConnection==='undefined')return;
-  try{
-   const c=newPc();
-   wireDc(c.createDataChannel('g',{ordered:false,maxRetransmits:0}));
-   await c.setLocalDescription(await c.createOffer());
-   sig('offer',{o:desc(c)});
-  }catch(e){closeRtc();}
- }
- async function onRtc(d){
-  if(!d||typeof RTCPeerConnection==='undefined')return;
-  try{
-   if(d.k==='offer'&&role==='guest'){
-    if(d.g!==room.gid)return;
-    closeRtc();const c=newPc();
-    c.ondatachannel=e=>wireDc(e.channel);
-    await c.setRemoteDescription(d.o);
-    await flush(c);
-    await c.setLocalDescription(await c.createAnswer());
-    sig('answer',{o:desc(c)});
-   }else if(d.k==='answer'&&role==='host'){
-    if(d.g!==peer||!pc)return;
-    await pc.setRemoteDescription(d.o);
-    await flush(pc);
-   }else if(d.k==='ice'){
-    if(d.g!==peer)return;
-    if(pc&&pc.remoteDescription)await pc.addIceCandidate(d.c).catch(()=>{});else pend.push(d.c);
-   }
-  }catch(e){}
- }
- hs.rtc=[m=>onRtc(m.data)];
- hs.hi=[m=>{if(role==='host'&&m.data&&m.data!==peer)hostStart(m.data);}];
- return Object.assign(room,{
-  ready:()=>new Promise((ok,no)=>{
-   if(ab.connection.state==='connected')return ok();
-   ab.connection.once('connected',ok);
-   ab.connection.once('failed',()=>no({type:'ably-failed'}));
-   setTimeout(()=>no({type:'timeout'}),15000);
-  }),
-  hello(){relay('hi',room.gid);},
-  emit(t,d){
-   if(room.p2p&&dc&&dc.readyState==='open'){
-    if(dc.bufferedAmount>65536)return Promise.resolve();
-    try{dc.send(JSON.stringify({t,d}));return Promise.resolve();}catch(e){}
-   }
-   relay(t,d);return Promise.resolve();
-  },
-  on(t,h){(hs[t]=hs[t]||[]).push(h);}
- });
-}
-async function goOnline(role,code){
- if(net.role)return;
- const st=document.getElementById('st');
- if(ABLY_KEY.indexOf('ВСТАВЬТЕ')>=0){st.textContent='В файле не вписан ключ Ably (ABLY_KEY).';return;}
- try{
-  const rm=mkRoom(code,role);net.room=rm;
-  await rm.ready();
- }catch(e){const ty=(e&&(e.type||e.code))||'ошибка';st.textContent='Нет связи с сервером Ably ('+ty+'): проверьте ключ и интернет.';net.room=null;return;}
- net.role=role;net.peer=false;net.snap=null;buildPads();
- net.room.onp2p=updNi;
- net.room.on('inp',m=>{
-  if(m.isMe||net.role!=='host')return;
-  const d=m.data||{};
-  if(d.g!==net.pg){net.pg=d.g;net.ln=-1;}
-  if(d.n!=null){if(d.n<=net.ln&&net.ln-d.n<50)return;net.ln=d.n;} // старые пакеты не применяем
-  keys.ArrowLeft=!!(d.i&1);keys.ArrowRight=!!(d.i&2);keys.ArrowUp=!!(d.i&4);
-  if(!net.peer){net.peer=true;lastSnapStr='';st.textContent=TOUCH?'Игра идёт. Вы — чёрный: кнопки на экране (рычаг — когда стоите рядом с ним).':'Игра идёт. Вы — чёрный: A / D, W — прыжок, S — рычаг (можно и стрелками).';document.body.classList.remove('menu');}
- });
- net.room.on('snap',m=>{
-  if(m.isMe||net.role!=='guest')return;
-  const d=m.data;if(!d)return;
-  if(net.snap&&d.q<=net.snap.q&&net.snap.q-d.q<50)return; // более старый снимок догнал позже нового
-  if(!net.snap){st.textContent=TOUCH?'Подключено. Вы — белый: кнопки на экране.':'Подключено. Вы — белый: стрелки или WASD.';document.body.classList.remove('menu');}
-  net.snap=d;
- });
- net.room.on('ping',m=>{if(net.role!=='host'||!m.data)return;if(m.data.r)net.rtt=m.data.r;net.room.emit('pong',{t:m.data.t});});
- net.room.on('pong',m=>{if(net.role!=='guest'||!m.data)return;const r=performance.now()-m.data.t;net.rtt=net.rtt?net.rtt*.7+r*.3:r;});
- if(role==='guest'){
-  const hi=()=>{if(net.role!=='guest'||net.snap)return;net.room.hello();setTimeout(hi,1000);};hi();
-  setTimeout(()=>{if(net.role==='guest'&&!net.snap)st.textContent='Хост не отвечает: проверьте код. Хост должен нажать «Создать комнату» и не закрывать вкладку.';},8000);
- }
- load(0);
- st.textContent=role==='host'?'Код комнаты: '+code.toUpperCase()+'. Скажите его второму игроку и ждите…':'Подключаемся к хосту… Вы — белый'+(TOUCH?'.':': стрелки или WASD.');
-}
 // ===== Сенсорное управление =====
 const TOUCH=matchMedia('(pointer:coarse)').matches||/[?&]touch\b/.test(location.search);
 const padL=document.getElementById('padL'),padR=document.getElementById('padR');
@@ -818,8 +638,8 @@ const ICON={l:'M16 4L6 12l10 8z',r:'M8 4l10 8-10 8z',u:'M4 17l8-11 8 11z'};
 const ic=k=>'<svg viewBox="0 0 24 24" width="46%" height="46%" aria-hidden="true"><path d="'+ICON[k]+'" fill="currentColor"/></svg>';
 const bt=(code,inner,cls)=>'<button type="button" data-k="'+code+'" class="'+(cls||'')+'">'+inner+'</button>';
 const held=new Map(),cnt=new Map();
-function prs(b){b.classList.add('on');keys[kc(b.dataset.k)]=true;}
-function rel(b){b.classList.remove('on');const c=kc(b.dataset.k);
+function prs(b){b.classList.add('on');keys[b.dataset.k]=true;}
+function rel(b){b.classList.remove('on');const c=b.dataset.k;
  if(b.dataset.k==='KeyS')setTimeout(()=>{if(!b.classList.contains('on'))keys[c]=false;},90); // рычаг реагирует на нажатие — держим минимум пару кадров
  else keys[c]=false;}
 function setBtn(id,b){
@@ -843,44 +663,27 @@ function bindPad(pad){
 function buildPads(){
  if(!TOUCH)return;
  releaseAll();
- let L,Rr,cL,cR;
- if(net.role){ // онлайн: один игрок — одна пара кнопок
-  const host=net.role==='host';
-  cL=cR=host?'pb':'pw';
-  L=bt('KeyA',ic('l'))+bt('KeyD',ic('r'));
-  Rr=host?bt('KeyS','Рычаг','lv')+bt('KeyW',ic('u')):bt('KeyW',ic('u'),'wide');
- }else{ // один телефон на двоих: слева чёрный, справа белый
-  cL='pb';cR='pw';
-  L=bt('KeyS','Рычаг','lv')+bt('KeyW',ic('u'))+bt('KeyA',ic('l'))+bt('KeyD',ic('r'));
-  Rr=bt('ArrowUp',ic('u'),'wide')+bt('ArrowLeft',ic('l'))+bt('ArrowRight',ic('r'));
- }
+ // Один телефон на двоих: слева чёрный, справа белый
+ const cL='pb',cR='pw';
+ const L=bt('KeyS','Рычаг','lv')+bt('KeyW',ic('u'))+bt('KeyA',ic('l'))+bt('KeyD',ic('r'));
+ const Rr=bt('ArrowUp',ic('u'),'wide')+bt('ArrowLeft',ic('l'))+bt('ArrowRight',ic('r'));
  padL.className='pad '+cL;padL.innerHTML=L;
  padR.className='pad '+cR;padR.innerHTML=Rr;
- document.getElementById('rs').style.display=net.role==='guest'?'none':'';
 }
 if(TOUCH){
  document.body.classList.add('touch');
  bindPad(padL);bindPad(padR);buildPads();
- document.getElementById('rs').onclick=()=>{if(!fin&&net.role!=='guest')load(lv);};
- document.getElementById('mb').onclick=()=>document.body.classList.toggle('menu');
+ document.getElementById('rs').onclick=()=>{if(!fin)load(lv);};
  addEventListener('blur',releaseAll);
  document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseAll();});
  document.addEventListener('gesturestart',e=>e.preventDefault());
- document.addEventListener('touchmove',e=>{if(!e.target.closest('#lobby'))e.preventDefault();},{passive:false});
+ document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
 }
 
 let last=0,acc=0;
-function frame(t){acc+=Math.min(t-last,100);last=t;while(acc>=16.67){step();acc-=16.67;}if(net.role==='host'&&net.peer&&++net.n%(net.room.p2p?2:3)===0)sendSnap();
- if(net.role==='guest')sendInp();
- if(net.role&&t-lastNi>1000){lastNi=t;if(net.role==='guest')net.room.emit('ping',{t:performance.now(),r:Math.round(net.rtt)});updNi();}
+function frame(t){acc+=Math.min(t-last,100);last=t;while(acc>=16.67){step();acc-=16.67;}
  draw();requestAnimationFrame(frame);}
 load(0);
-document.getElementById('bh').onclick=()=>goOnline('host',Math.random().toString(36).slice(2,6).padEnd(4,'x'));
-document.getElementById('bj').onclick=()=>{
- const c=document.getElementById('ci').value.trim().toLowerCase();
- if(/^[a-z0-9]{3,8}$/.test(c))goOnline('guest',c);
- else document.getElementById('st').textContent='Введите код комнаты от хоста.';
-};
 requestAnimationFrame(t=>{last=t;frame(t);});
 </script>
 </body>
