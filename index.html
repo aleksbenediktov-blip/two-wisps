@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Два огонька</title>
 <style>
 :root{color-scheme:dark;--bg:#0c0e1a;--fg:#e9e6f5;--mut:#8f93b0;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -12,49 +12,11 @@ body{display:flex;flex-direction:column;align-items:center;justify-content:cente
 canvas{max-width:100%;height:auto;border-radius:6px;box-shadow:0 0 40px rgba(140,110,255,.15)}
 button,input{font:inherit;font-size:14px;background:#1c1f38;color:var(--fg);border:1px solid #3a3f6c;border-radius:4px;padding:3px 8px}
 p{margin:0;color:var(--mut);font-size:15px;text-align:center;padding:0 12px}
-
-/* ---------- Мобильное управление ---------- */
-body{box-sizing:border-box;overscroll-behavior:none}
-#stage{display:contents}
-.pad,#tb,#rot{display:none}
-body.touch{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
-body.touch button{font-size:16px;padding:8px 12px}
-body.touch #stage{display:grid;grid-template-columns:1fr 1fr;grid-template-areas:"cv cv" "pl pr";gap:12px 8px;width:100%;box-sizing:border-box;align-items:end;
- padding:0 max(10px,env(safe-area-inset-right)) 0 max(10px,env(safe-area-inset-left));--bs:clamp(46px,15vw,66px)}
-body.touch canvas{grid-area:cv;width:100%;justify-self:center;align-self:center}
-body.touch #padL{grid-area:pl;justify-self:start}
-body.touch #padR{grid-area:pr;justify-self:end}
-body.touch .pad{display:grid;grid-template-columns:repeat(2,var(--bs));gap:6px;touch-action:none}
-body.touch .pad button{width:var(--bs);height:var(--bs);padding:0;border-radius:14px;background:rgba(40,44,86,.7);border:2px solid #4b5090;color:var(--fg);
- display:flex;align-items:center;justify-content:center;touch-action:none;-webkit-tap-highlight-color:transparent}
-body.touch .pad.pb button{border-color:#a98bff}
-body.touch .pad.pw button{border-color:#ffe9a0}
-body.touch .pad button.on{background:rgba(160,130,255,.75);transform:scale(.94)}
-body.touch .pad.pw button.on{background:rgba(255,233,160,.55)}
-body.touch .pad button.wide{grid-column:span 2;width:100%}
-body.touch .pad button.lv{font-size:12px;line-height:1.1}
-body.touch .kbd{display:none}
-body.touch #rot{display:block}
-body.touch #tb{display:flex;gap:6px;position:fixed;z-index:20;top:max(6px,env(safe-area-inset-top));right:max(8px,env(safe-area-inset-right))}
-body.touch #tb button{width:42px;height:42px;padding:0;font-size:20px;border-radius:10px;background:rgba(28,31,56,.85)}
-@media (orientation:landscape){
- body.touch #rot{display:none}
- body.touch #stage{grid-template-columns:auto 1fr auto;grid-template-areas:"pl cv pr";height:100%;gap:6px;--bs:clamp(42px,13vh,60px)}
- body.touch canvas{width:min(100%,calc((100vh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))*1.7647));
-  width:min(100%,calc((100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))*1.7647))}
- body.touch .pad{align-self:end;margin-bottom:6px}
-}
 </style>
 </head>
 <body>
-<div id="tb"><button id="rs" type="button" title="Начать уровень заново">↺</button></div>
-<div id="stage">
-<div class="pad" id="padL"></div>
 <canvas id="c"></canvas>
-<div class="pad" id="padR"></div>
-</div>
-<p id="rot">Поверните телефон горизонтально — так играть удобнее.</p>
-<p class="kbd">Чёрный: A / D — ходить, W — прыжок, S — рычаг &nbsp;·&nbsp; Белый: ← / → — ходить, ↑ — прыжок &nbsp;·&nbsp; R — начать уровень заново</p>
+<p>Чёрный: A / D — ходить, W — прыжок, S — рычаг &nbsp;·&nbsp; Белый: ← / → — ходить, ↑ — прыжок &nbsp;·&nbsp; R — начать уровень заново</p>
 <script>
 const T=32,W=30,H=17,R=140;
 const cv=document.getElementById('c'),ctx=cv.getContext('2d');
@@ -629,55 +591,6 @@ function draw(){
   ctx.fillText(fin?'Все уровни пройдены':'Уровень пройден',cv.width/2,cv.height/2);
  }
 }
-// ===== Сенсорное управление =====
-const TOUCH=matchMedia('(pointer:coarse)').matches||/[?&]touch\b/.test(location.search);
-const padL=document.getElementById('padL'),padR=document.getElementById('padR');
-const ICON={l:'M16 4L6 12l10 8z',r:'M8 4l10 8-10 8z',u:'M4 17l8-11 8 11z'};
-const ic=k=>'<svg viewBox="0 0 24 24" width="46%" height="46%" aria-hidden="true"><path d="'+ICON[k]+'" fill="currentColor"/></svg>';
-const bt=(code,inner,cls)=>'<button type="button" data-k="'+code+'" class="'+(cls||'')+'">'+inner+'</button>';
-const held=new Map(),cnt=new Map();
-function prs(b){b.classList.add('on');keys[b.dataset.k]=true;}
-function rel(b){b.classList.remove('on');const c=b.dataset.k;
- if(b.dataset.k==='KeyS')setTimeout(()=>{if(!b.classList.contains('on'))keys[c]=false;},90); // рычаг реагирует на нажатие — держим минимум пару кадров
- else keys[c]=false;}
-function setBtn(id,b){
- const old=held.get(id);if(old===b)return;
- if(old){const n=(cnt.get(old)||1)-1;cnt.set(old,n);if(!n)rel(old);}
- if(b){held.set(id,b);const n=(cnt.get(b)||0)+1;cnt.set(b,n);if(n===1)prs(b);}else held.delete(id);
-}
-function releaseAll(){
- held.clear();cnt.clear();
- document.querySelectorAll('.pad button.on').forEach(b=>b.classList.remove('on'));
- for(const k of ['KeyA','KeyD','KeyW','KeyS','ArrowLeft','ArrowRight','ArrowUp'])keys[k]=false;
-}
-function btnAt(pad,e){const el=document.elementFromPoint(e.clientX,e.clientY);const b=el&&el.closest&&el.closest('button[data-k]');return b&&pad.contains(b)?b:null;}
-function bindPad(pad){
- pad.addEventListener('pointerdown',e=>{e.preventDefault();try{pad.setPointerCapture(e.pointerId);}catch(_){}setBtn(e.pointerId,btnAt(pad,e));});
- pad.addEventListener('pointermove',e=>{if(held.has(e.pointerId)||(pad.hasPointerCapture&&pad.hasPointerCapture(e.pointerId)))setBtn(e.pointerId,btnAt(pad,e));});
- const up=e=>setBtn(e.pointerId,null);
- pad.addEventListener('pointerup',up);pad.addEventListener('pointercancel',up);pad.addEventListener('lostpointercapture',up);
- pad.addEventListener('contextmenu',e=>e.preventDefault());
-}
-function buildPads(){
- if(!TOUCH)return;
- releaseAll();
- // Один телефон на двоих: слева чёрный, справа белый
- const cL='pb',cR='pw';
- const L=bt('KeyS','Рычаг','lv')+bt('KeyW',ic('u'))+bt('KeyA',ic('l'))+bt('KeyD',ic('r'));
- const Rr=bt('ArrowUp',ic('u'),'wide')+bt('ArrowLeft',ic('l'))+bt('ArrowRight',ic('r'));
- padL.className='pad '+cL;padL.innerHTML=L;
- padR.className='pad '+cR;padR.innerHTML=Rr;
-}
-if(TOUCH){
- document.body.classList.add('touch');
- bindPad(padL);bindPad(padR);buildPads();
- document.getElementById('rs').onclick=()=>{if(!fin)load(lv);};
- addEventListener('blur',releaseAll);
- document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseAll();});
- document.addEventListener('gesturestart',e=>e.preventDefault());
- document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
-}
-
 let last=0,acc=0;
 function frame(t){acc+=Math.min(t-last,100);last=t;while(acc>=16.67){step();acc-=16.67;}
  draw();requestAnimationFrame(frame);}
