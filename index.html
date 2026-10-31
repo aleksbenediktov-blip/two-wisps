@@ -131,7 +131,6 @@ function ctl(p,l,r,u){
 function step(){
  t0++;
  if(net.role==='guest'){lerpAll();return;}
- if(net.role==='host'&&!net.peer)return;
  if(wait>0){wait--;if(wait===0){if(lv+1<LV.length)load(lv+1);else fin=true;}return;}
  if(fin)return;
  gateOpen=touches(B,'k')||boxes.some(b=>touches(b,'k'));
@@ -233,15 +232,15 @@ async function goOnline(role,code){
   if(role==='host'){
    const peer=new Peer('twowisps-'+code);
    await new Promise((ok,no)=>{peer.on('open',ok);peer.on('error',no);});
-   peer.on('connection',c=>{if(!net.conn){net.conn=c;c.on('open',()=>rm.setConn(c));}});
+   peer.on('connection',c=>{if(!net.conn){net.conn=c;st.textContent='Второй игрок подключается…';c.on('open',()=>rm.setConn(c));}});
   }else{
    const peer=new Peer();
    await new Promise((ok,no)=>{peer.on('open',ok);peer.on('error',no);});
    const c=peer.connect('twowisps-'+code);
-   await new Promise((ok,no)=>{c.on('open',ok);c.on('error',no);setTimeout(()=>no({type:'timeout'}),10000);});
+   await new Promise((ok,no)=>{c.on('open',ok);c.on('error',no);peer.on('error',no);setTimeout(()=>no({type:'timeout'}),20000);});
    rm.setConn(c);
   }
- }catch(e){st.textContent='Не удалось подключиться ('+((e&&(e.type||e.code))||'ошибка')+'). Проверьте код.';net.room=null;return;}
+ }catch(e){const ty=(e&&(e.type||e.code))||'ошибка';const M={'peer-unavailable':'комната с таким кодом не найдена: хост должен нажать «Создать комнату» и не закрывать вкладку','timeout':'прямая связь не установилась: отключите VPN и блокировщики или попробуйте с другого интернета'};st.textContent='Не удалось подключиться ('+ty+'): '+(M[ty]||'проверьте код и интернет')+'.';net.room=null;return;}
  net.role=role;net.peer=false;net.snap=null;
  net.room.on('inp',m=>{
   if(m.isMe||net.role!=='host')return;
